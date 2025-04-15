@@ -1,0 +1,42 @@
+digraph {
+	Start [label=Start fillcolor=lightgray shape=ellipse style=filled]
+	Init [label="Initialize Parameters
+(Choose dataset, Load images)" shape=rectangle]
+	FaceDetect [label="Initialize Face Detector" shape=rectangle]
+	Loop [label="Loop through each image" shape=diamond]
+	Load [label="Load Image & Ground Truth" shape=rectangle]
+	FaceDetectStep [label="Viola-Jones Face Detection" shape=rectangle]
+	FaceFound [label="Face Detected?" shape=diamond]
+	CropFace [label="Crop & Zoom Face Region" shape=rectangle]
+	SkinSegment [label="Skin Segmentation
+(Histogram Backprojection, Adaptive Thresholding)" shape=rectangle]
+	HairSegment [label="Hair Segmentation
+(Value Thresholding)" shape=rectangle]
+	TorsoSegment [label="Torso Segmentation
+(Gradient Analysis, Hue Extraction)" shape=rectangle]
+	Refine [label="Mask Refinements
+(Remove Green, Edge Seperation, Morphological Ops)" shape=rectangle]
+	Template [label="Apply Human Template Mask" shape=rectangle]
+	Evaluation [label="Performance Evaluation
+(IoU, False Positives, False Negatives)" shape=rectangle]
+	Display [label="Display Results
+(Overlay Mask, Show IoU Score)" shape=rectangle]
+	End [label=End fillcolor=lightgray shape=ellipse style=filled]
+	Start -> Init
+	Init -> FaceDetect
+	FaceDetect -> Loop
+	Loop -> Load
+	Load -> FaceDetectStep
+	FaceDetectStep -> FaceFound
+	FaceFound -> CropFace [label=Yes]
+	CropFace -> SkinSegment
+	SkinSegment -> HairSegment
+	HairSegment -> TorsoSegment
+	TorsoSegment -> Refine
+	Refine -> Template
+	Template -> Evaluation
+	Evaluation -> Display
+	Display -> Loop
+	FaceFound -> Loop [label=No]
+	Loop -> End [label="All Images Processed"]
+}
