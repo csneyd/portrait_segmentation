@@ -23,20 +23,20 @@ def create_flowchart():
     dot.node('SkinSegment', 'Skin Segmentation\n(Histogram Backprojection, Adaptive Thresholding)', shape='rectangle')
     
     # Hair Segmentation
-    dot.node('HairSegment', 'Hair Segmentation\n(Value Thresholding)', shape='rectangle')
+    dot.node('HairSegment', 'Hair Segmentation\n(Frequency-Domain Analysis, Value and Hue Thresholding)', shape='rectangle')
     
     # Torso Segmentation
-    dot.node('TorsoSegment', 'Torso Segmentation\n(Gradient Analysis, Hue Extraction)', shape='rectangle')
+    dot.node('TorsoSegment', 'Torso Segmentation\n(Canny Edge Detection, Hue Extraction)', shape='rectangle')
     
     # Refinements
-    dot.node('Refine', 'Mask Refinements\n(Remove Green, Edge Seperation, Morphological Ops)', shape='rectangle')
+    dot.node('Refine', 'Mask Refinements\n(Remove Green, Edge Separation, Morphological Ops)', shape='rectangle')
     dot.node('Template', 'Apply Human Template Mask', shape='rectangle')
     
     # Evaluation
     dot.node('Evaluation', 'Performance Evaluation\n(IoU, False Positives, False Negatives)', shape='rectangle')
     
     # Display Results
-    dot.node('Display', 'Display Results\n(Overlay Mask, Show IoU Score)', shape='rectangle')
+    dot.node('Display', 'Display Results\n(Overlay Mask, Show IoU Score and Processing Time)', shape='rectangle')
     
     # End
     dot.node('End', 'End', shape='ellipse', style='filled', fillcolor='lightgray')

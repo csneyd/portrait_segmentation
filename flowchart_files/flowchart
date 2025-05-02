@@ -11,16 +11,16 @@ digraph {
 	SkinSegment [label="Skin Segmentation
 (Histogram Backprojection, Adaptive Thresholding)" shape=rectangle]
 	HairSegment [label="Hair Segmentation
-(Value Thresholding)" shape=rectangle]
+(Frequency-Domain Analysis, Value and Hue Thresholding)" shape=rectangle]
 	TorsoSegment [label="Torso Segmentation
-(Gradient Analysis, Hue Extraction)" shape=rectangle]
+(Canny Edge Detection, Hue Extraction)" shape=rectangle]
 	Refine [label="Mask Refinements
-(Remove Green, Edge Seperation, Morphological Ops)" shape=rectangle]
+(Remove Green, Edge Separation, Morphological Ops)" shape=rectangle]
 	Template [label="Apply Human Template Mask" shape=rectangle]
 	Evaluation [label="Performance Evaluation
 (IoU, False Positives, False Negatives)" shape=rectangle]
 	Display [label="Display Results
-(Overlay Mask, Show IoU Score)" shape=rectangle]
+(Overlay Mask, Show IoU Score and Processing Time)" shape=rectangle]
 	End [label=End fillcolor=lightgray shape=ellipse style=filled]
 	Start -> Init
 	Init -> FaceDetect
