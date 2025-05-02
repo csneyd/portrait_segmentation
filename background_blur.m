@@ -1,7 +1,7 @@
 clc; close all; clear;
 
 % Choose dataset 1, 2, or 3
-chooseDataset = 3;
+chooseDataset = 2;
 
 if chooseDataset == 1
     imageFolder = 'dataset1';                % Folder containing dataset images
@@ -21,6 +21,7 @@ groundTruthFiles = dir(fullfile(groundTruthFolder, '*.png'));  % Masks are .png
 % Number of images
 numImages = length(imageFiles);
 procTimes = zeros(numImages, 1);
+overallIOU = [];
 
 % Create a Viola-Jones detector object for face detection
 faceDetector = vision.CascadeObjectDetector();
@@ -167,16 +168,51 @@ for i = 1:numImages
 
         %% Hair Segmentation
 
-        % Convert to HSV color space
-        hsvImg = rgb2hsv(img);
+        % Frequency-Domain Analysis
+        grayImg = rgb2gray(img);
+        grayHeadCrop = im2gray(faceRegion);       % Convert region to grayscale
+        [M, N] = size(grayImg);                   % Dims of input img
+        
+        P = 2 * M;                                % Define row padding
+        Q = 2 * N;                                % Define column padding
+        
+        f = padarray(grayImg, [M N], 0, 'post');  % Pad image with zeros
+        F = fft2(double(f));                      % Perform FFT
+        Fshift = fftshift(F);                     % Shift DC to center
+        
+        % Generate filtered images
+        H = hairFilter(P, Q, 5, 25);              % Generate Gaussian LP filter
+        G = Fshift .* H;                          % Apply filter to input img freq spectrum
+        
+        g = ifft2(fftshift(G));                   % Shift back and return to spatial domain
+        g_o = real(g);                            % Take real part
+        freqMap = g_o(1:M, 1:N);                  % Cut out portion of image that is not zeros
+    
+        meanFreq = mean(freqMap(:));  % Calculate the mean of the frequency map
+        stdFreq = std(freqMap(:));    % Calculate the standard deviation of the frequency map
+        
+        % Define threshold: mean minus standard deviation
+        threshold = meanFreq - stdFreq;
+        
+        % Apply thresholding
+        freqMask = freqMap <= threshold;
+
+        % Morphological refinements
+        se = strel('disk', 5);
+        freqMask = imclose(freqMask, se);
+        freqMask = imopen(freqMask, se);
+        
+
+        % Value and Hue Based Thresholding
+        hsvImg = rgb2hsv(img);    % Convert to HSV color space
         vChannel = hsvImg(:,:,3); % Value (brightness)
         hChannel = hsvImg(:,:,1); % Hue
-        sChannel = hsvImg(:,:,2);
+        sChannel = hsvImg(:,:,2); % Used later
         
         % Threshold for potential hair region using Value channel
         hairMaskV = vChannel < 0.25; % Threshold for darker regions
-        hairMask = hairMaskV & (hChannel < 0.2 | hChannel > 0.6);
-        
+        hairMask = (hairMaskV | freqMask) & (hChannel < 0.2 | hChannel > 0.6);  % Combined with freqMask and threshold hue
+
 
         %% Torso Segmentation
 
@@ -198,15 +234,14 @@ for i = 1:numImages
         maskAboveMouth = true(size(img, 1), size(img, 2));
         maskAboveMouth(mouthBox(2) + mouthBox(4):end, :) = false;
         maskBelowMouth = ~maskAboveMouth;
-    
-        % Compute gradient of the Hue channel to add in edges below mouth
-        [Gx, Gy] = gradient(double(hChannel)); % Gradient in x and y directions
-        gradientMag = sqrt(Gx.^2 + Gy.^2); % Magnitude of the gradient
-    
-        % Threshold the gradient to find regions with rapid hue changes
-        hueEdges = gradientMag > 0.11; % threshold
-    
-        % Combine masks based on regions
+
+        % Convert hue channel to grayscale
+        hueForEdges = mat2gray(hChannel);
+
+        % Apply Canny edge detection
+        hueEdges = edge(hueForEdges, 'Canny', [0.05, 0.15]);  % Hysteresis thresholds
+
+        % Combine hair and edge masks
         combinedMask = hairMask; % Start with the hair mask
         combinedMask(maskBelowMouth) = hairMask(maskBelowMouth) | hueEdges(maskBelowMouth);
 
@@ -228,7 +263,7 @@ for i = 1:numImages
             refinedMask(CC.PixelIdxList{largestIdx(j)}) = true;
         end
         
-        % Combined face, hair, and edge mask
+        % Combined face, hair, and edge masks
         combinedMask = refinedMask | largestRegionMask;
         
 
@@ -545,6 +580,7 @@ for i = 1:numImages
         % PASS/FAIL test
         if iou > 0.75
             text(size(overlay,2)/2, size(overlay,1) + 55, 'PASS', 'FontSize', 10, 'FontWeight', 'bold', 'HorizontalAlignment', 'center');
+            overallIOU = [overallIOU; iou];
         else
             text(size(overlay,2)/2, size(overlay,1) + 55, 'FAIL', 'Color', 'r', 'FontSize', 10, 'FontWeight', 'bold', 'HorizontalAlignment', 'center');
         end
@@ -563,3 +599,6 @@ end
 
 avgTime = mean(procTimes);
 fprintf('Average processing time: %.4f seconds\n', avgTime);
+
+avgIOU = mean(overallIOU);
+fprintf('Average IoU among passing results: %.4f\n', avgIOU);

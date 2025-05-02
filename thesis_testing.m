@@ -14,9 +14,9 @@ chooseDataset = 1;
 %     groundTruthFolder = 'ground_truth_d3';
 % end
 
-imageFiles = {'1803241638-00000200.jpg', '1803290100-00000210.jpg', '1803231608-00000265.jpg', '1803270348-00000125.jpg', '1803191139-00000528.jpg'};
+imageFiles = {'1803290100-00000343.jpg', '1803191139-00000596.jpg', '1803270036-00000122.jpg', '1803270158-00000217.jpg', '1803290100-00000343.jpg'};
 
-groundTruth = {'1803241638-00000200.png', '1803290100-00000210.png', '1803231608-00000265.png', '1803270348-00000125.png', '1803191139-00000528.png'};
+groundTruth = {'1803290100-00000343.png', '1803191139-00000596.png', '1803270036-00000122.png', '1803270158-00000217.png', '1803290100-00000343.png'};
 
 
 % % Get all filenames from both folders
@@ -36,7 +36,7 @@ set(gcf, 'Position', [100, 100, 1200, 800]); % Figure layout sizing
 subplotIdx = 1;
 
 % Loop through each image, detect face, apply skin segmentation, and display
-for i = 1:5
+for i = 1
     tic;  % Start timer
 
     % % Read the current image and corresponding ground truth
@@ -177,6 +177,42 @@ for i = 1:5
 
 
         %% Hair Segmentation
+        grayImg = rgb2gray(img);      
+        [M, N] = size(grayImg);                   % Dims of input img
+        
+        P = 2 * M;                                  % Define row padding
+        Q = 2 * N;                                  % Define column padding
+        
+        f = padarray(grayImg, [M N], 0, 'post');  % Pad image with zeros
+        F = fft2(double(f));                        % Perform FFT
+        Fshift = fftshift(F);                       % Shift DC to center
+        
+        % Generate filtered images for 5 different frequencies
+
+        H = hairFilter(P, Q, 5, 25);            % Generate Gaussian LP filter
+        G = Fshift .* H;                        % Apply filter to input img freq spectrum
+        
+        g = ifft2(fftshift(G));                 % Shift back and return to spatial domain
+        g_o = real(g);                   % Take real part
+        freqMap = g_o(1:M, 1:N);                    % Cut out portion of image that is not zeros
+    
+        meanFreq = mean(freqMap(:));  % Calculate the mean of the frequency map
+        stdFreq = std(freqMap(:));    % Calculate the standard deviation of the frequency map
+        
+        % Define threshold: mean minus standard deviation
+        threshold = meanFreq - stdFreq;
+        
+        % Apply thresholding
+        freqMask = freqMap <= threshold;
+        
+        % Convert logical map to binary
+        freqMask = double(freqMask);
+    
+    
+        se = strel('disk', 5); % A disk-shaped structuring element with a radius of 5 pixels
+        freqMask = imclose(freqMask, se);
+        freqMask = imopen(freqMask, se);
+    
 
         % Load Viola-Jones detector for mouth detection
         mouthDetector = vision.CascadeObjectDetector('Mouth', 'MergeThreshold', 16);
@@ -189,7 +225,8 @@ for i = 1:5
         
         % Threshold for potential hair region using Value channel
         hairMaskV = vChannel < 0.25; % Threshold for darker regions
-        hairMask = hairMaskV & (hChannel < 0.2 | hChannel > 0.6);
+        hairMask = (hairMaskV | freqMask) & (hChannel < 0.2 | hChannel > 0.6);
+
         
         % Detect mouth region using Viola-Jones
         bbox = step(mouthDetector, img); % Detect mouth bounding box
@@ -211,12 +248,20 @@ for i = 1:5
         [Gx, Gy] = gradient(double(hChannel)); % Gradient in x and y directions
         gradientMag = sqrt(Gx.^2 + Gy.^2); % Magnitude of the gradient
     
-        % Threshold the gradient to find regions with rapid hue changes
-        hueEdges = gradientMag > 0.11; % threshold
+        % % Threshold the gradient to find regions with rapid hue changes
+        % hueEdges = gradientMag > 0.11; % threshold
+
+        % Convert hue channel to grayscale-like input (it's already 2D)
+        hueForEdges = mat2gray(hChannel);  % Normalize to [0, 1] if needed
+
+        % Apply Canny edge detection
+        hueEdges = edge(hueForEdges, 'Canny', [0.05, 0.15]);  % Tune thresholds as needed
     
         % Combine masks based on regions
         combinedMask = hairMask; % Start with the V-channel mask
         combinedMask(maskBelowMouth) = hairMask(maskBelowMouth) | hueEdges(maskBelowMouth);
+
+        addedEdgesMask = combinedMask;
 
         % Morphological operations to refine the mask
         se = strel('disk', 6);
@@ -521,12 +566,30 @@ for i = 1:5
         
         % Convert original image to double for overlay
         overlay_image = im2double(img);
-        
+
         % Create an RGB overlay
         overlay = overlay_image;
         overlay(:,:,1) = overlay(:,:,1) + false_positives(:,:,1) * 0.8;  % Red for FP
         overlay(:,:,2) = overlay(:,:,2) + intersection(:,:,2) * 0.8;     % Green for TP
         overlay(:,:,3) = overlay(:,:,3) + false_negatives(:,:,3) * 0.8;  % Blue for FN
+
+        % overlay_image = im2double(img);
+        % 
+        % % Make a copy for the overlay result
+        % overlay = overlay_image;
+        % 
+        % % Amount of green intensity to add
+        % green_intensity = 0.8;
+        % 
+        % % Overlay the mask in green
+        % for c = 1:3
+        %     if c == 2  % Green channel
+        %         overlay(:,:,c) = overlay(:,:,c) + green_intensity * mask;
+        %     end
+        % end
+        % 
+        % % Clip values to valid range [0,1]
+        % overlay = min(overlay, 1);
 
 
         %% Apply background blur
@@ -553,13 +616,13 @@ for i = 1:5
         %% Display the results
         
         % Display generated mask
-        subplot(2, 5, subplotIdx);
+        subplot(1, 2, subplotIdx);
         imshow(finalImg); 
-        title(['Predicted Result ' num2str(i)], 'FontSize', 12); 
-        subplotIdx = subplotIdx + 5;
+        title(['Blurring Result ' num2str(i)], 'FontSize', 12); 
+        subplotIdx = subplotIdx + 1;
 
         % Display mask overlay results with IOU
-        subplot(2, 5, subplotIdx);
+        subplot(1, 2, subplotIdx);
         imshow(overlay);
         title(sprintf('Overlay %d (IoU: %.4f)', i, iou), 'FontSize', 12);
         hold on;
